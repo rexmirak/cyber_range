@@ -1,0 +1,135 @@
+{
+  "metadata": {
+    "name": "Web SQL Injection Lab",
+    "description": "Learn SQL injection basics by exploiting a vulnerable web application",
+    "author": "CyberRange Team",
+    "version": "1.0.0",
+    "difficulty": "easy",
+    "estimated_time_minutes": 30,
+    "tags": ["web", "sqli", "beginner"],
+    "learning_objectives": [
+      "Identify SQL injection vulnerabilities",
+      "Extract data using SQL injection",
+      "Understand basic web security testing"
+    ]
+  },
+  "networks": [
+    {
+      "id": "net_main",
+      "name": "main_network",
+      "type": "custom_bridge",
+      "subnet": "172.20.0.0/16"
+    }
+  ],
+  "hosts": [
+    {
+      "id": "host_attacker",
+      "name": "attacker",
+      "type": "attacker",
+      "base_image": "kalilinux/kali-rolling",
+      "networks": [
+        {
+          "network_id": "net_main",
+          "ip_address": "172.20.0.10"
+        }
+      ],
+      "resources": {
+        "cpu_limit": "1.0",
+        "memory_limit": "1g"
+      },
+      "services": [],
+      "vulnerabilities": [],
+      "flags": []
+    },
+    {
+      "id": "host_web",
+      "name": "webserver",
+      "type": "web",
+      "base_image": "php:7.4-apache",
+      "networks": [
+        {
+          "network_id": "net_main",
+          "ip_address": "172.20.0.20"
+        }
+      ],
+      "resources": {
+        "cpu_limit": "0.5",
+        "memory_limit": "512m"
+      },
+      "services": ["svc_web"],
+      "vulnerabilities": ["vuln_sqli"],
+      "flags": ["flag_admin_password"]
+    }
+  ],
+  "services": [
+    {
+      "id": "svc_web",
+      "name": "vulnerable_web_app",
+      "type": "apache",
+      "version": "2.4",
+      "ports": [
+        {
+          "internal": 80,
+          "protocol": "tcp"
+        }
+      ],
+      "config": {
+        "credentials": [
+          {
+            "username": "admin",
+            "password": "P@ssw0rd123"
+          }
+        ]
+      }
+    }
+  ],
+  "vulnerabilities": [
+    {
+      "id": "vuln_sqli",
+      "name": "SQL Injection in Login",
+      "type": "sql_injection",
+      "severity": "high",
+      "description": "The login form is vulnerable to SQL injection due to unsanitized user input",
+      "affected_service": "svc_web",
+      "exploitation_notes": "Try common SQLi payloads in the username field",
+      "remediation": "Use parameterized queries and input validation",
+      "setup": {
+        "module": "modules/sqli_login.sh",
+        "parameters": {}
+      }
+    }
+  ],
+  "flags": [
+    {
+      "id": "flag_admin_password",
+      "name": "Admin Password",
+      "value": "FLAG{sql_1nj3ct10n_m4st3r}",
+      "placement": {
+        "type": "db_row",
+        "host_id": "host_web",
+        "details": {
+          "table": "users",
+          "query": "SELECT password FROM users WHERE username='admin'"
+        }
+      },
+      "points": 100,
+      "hint": "Try SQL injection on the login form. Look for ways to bypass authentication."
+    }
+  ],
+  "scoring": {
+    "total_points": 100,
+    "passing_score": 100,
+    "time_bonus": false,
+    "penalty_for_hints": false
+  },
+  "narrative": {
+    "scenario_background": "You've been hired to test the security of a web application for a client. The application has a login portal that may be vulnerable to attack.",
+    "attacker_role": "Penetration Tester",
+    "objectives": [
+      "Identify the SQL injection vulnerability",
+      "Exploit the vulnerability to bypass authentication",
+      "Extract the admin password from the database"
+    ],
+    "success_criteria": "Capture the flag stored in the database"
+  }
+}

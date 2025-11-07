@@ -1,0 +1,227 @@
+{
+  "metadata": {
+    "name": "Corporate Network Pivot",
+    "description": "Exploit a web server and pivot to an internal database server to practice lateral movement",
+    "author": "CyberRange Team",
+    "version": "1.0.0",
+    "difficulty": "medium",
+    "estimated_time_minutes": 60,
+    "tags": ["web", "pivot", "lateral-movement", "database", "ssrf"],
+    "learning_objectives": [
+      "Exploit web vulnerabilities (SSRF)",
+      "Perform lateral movement between network segments",
+      "Access internal services from a compromised host",
+      "Extract credentials and use them for further access"
+    ]
+  },
+  "networks": [
+    {
+      "id": "net_dmz",
+      "name": "dmz",
+      "type": "public",
+      "subnet": "172.20.0.0/24"
+    },
+    {
+      "id": "net_internal",
+      "name": "internal",
+      "type": "isolated",
+      "subnet": "172.20.1.0/24"
+    }
+  ],
+  "hosts": [
+    {
+      "id": "host_attacker",
+      "name": "attacker",
+      "type": "attacker",
+      "base_image": "kalilinux/kali-rolling",
+      "networks": [
+        {
+          "network_id": "net_dmz",
+          "ip_address": "172.20.0.5"
+        }
+      ],
+      "resources": {
+        "cpu_limit": "2.0",
+        "memory_limit": "2g"
+      },
+      "services": [],
+      "vulnerabilities": [],
+      "flags": []
+    },
+    {
+      "id": "host_web",
+      "name": "webserver",
+      "type": "web",
+      "base_image": "ubuntu:22.04",
+      "networks": [
+        {
+          "network_id": "net_dmz",
+          "ip_address": "172.20.0.10"
+        },
+        {
+          "network_id": "net_internal",
+          "ip_address": "172.20.1.10"
+        }
+      ],
+      "resources": {
+        "cpu_limit": "1.0",
+        "memory_limit": "1g"
+      },
+      "services": ["svc_nginx"],
+      "vulnerabilities": ["vuln_ssrf", "vuln_exposed_creds"],
+      "flags": ["flag_web"]
+    },
+    {
+      "id": "host_db",
+      "name": "database",
+      "type": "db",
+      "base_image": "mysql:8.0",
+      "networks": [
+        {
+          "network_id": "net_internal",
+          "ip_address": "172.20.1.20"
+        }
+      ],
+      "resources": {
+        "cpu_limit": "1.0",
+        "memory_limit": "1g"
+      },
+      "services": ["svc_mysql"],
+      "vulnerabilities": ["vuln_weak_db_password"],
+      "flags": ["flag_db"]
+    }
+  ],
+  "services": [
+    {
+      "id": "svc_nginx",
+      "name": "nginx_web_server",
+      "type": "nginx",
+      "version": "1.22",
+      "ports": [
+        {
+          "internal": 80,
+          "external": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "config": {}
+    },
+    {
+      "id": "svc_mysql",
+      "name": "mysql_database",
+      "type": "mysql",
+      "version": "8.0",
+      "ports": [
+        {
+          "internal": 3306,
+          "protocol": "tcp"
+        }
+      ],
+      "config": {
+        "credentials": [
+          {
+            "username": "root",
+            "password": "password123",
+            "role": "admin"
+          }
+        ]
+      }
+    }
+  ],
+  "vulnerabilities": [
+    {
+      "id": "vuln_ssrf",
+      "name": "SSRF in Image Proxy",
+      "type": "ssrf",
+      "severity": "high",
+      "description": "The web application has an SSRF vulnerability in the image proxy endpoint that allows attackers to make requests to internal services",
+      "affected_service": "svc_nginx",
+      "exploitation_notes": "The /proxy endpoint accepts a URL parameter and fetches content without validation",
+      "remediation": "Implement URL validation and whitelist allowed domains",
+      "setup": {
+        "module": "modules/ssrf_proxy.sh",
+        "parameters": {
+          "endpoint": "/proxy"
+        }
+      }
+    },
+    {
+      "id": "vuln_exposed_creds",
+      "name": "Exposed Database Credentials",
+      "type": "misconfiguration",
+      "severity": "medium",
+      "description": "Database credentials are stored in a world-readable configuration file",
+      "affected_service": "svc_nginx",
+      "exploitation_notes": "Configuration file is accessible via directory traversal or after gaining shell access",
+      "remediation": "Store credentials securely using environment variables or secrets management",
+      "setup": {
+        "module": "modules/exposed_config.sh",
+        "parameters": {
+          "file_path": "/var/www/config.php"
+        }
+      }
+    },
+    {
+      "id": "vuln_weak_db_password",
+      "name": "Weak Database Password",
+      "type": "weak_password",
+      "severity": "medium",
+      "description": "The database uses a weak, easily guessable password",
+      "affected_service": "svc_mysql",
+      "exploitation_notes": "Password can be cracked or guessed with common password lists",
+      "remediation": "Use strong, randomly generated passwords",
+      "setup": {
+        "module": "modules/weak_mysql_password.sh",
+        "parameters": {}
+      }
+    }
+  ],
+  "flags": [
+    {
+      "id": "flag_web",
+      "name": "Web Server Flag",
+      "value": "FLAG{ssrf_t0_1nt3rn4l}",
+      "placement": {
+        "type": "file",
+        "host_id": "host_web",
+        "details": {
+          "path": "/var/www/flag.txt"
+        }
+      },
+      "points": 40,
+      "hint": "Look for misconfigurations or vulnerabilities in the web application"
+    },
+    {
+      "id": "flag_db",
+      "name": "Database Flag",
+      "value": "FLAG{l4t3r4l_m0v3m3nt_c0mpl3t3}",
+      "placement": {
+        "type": "db_row",
+        "host_id": "host_db",
+        "details": {
+          "table": "secrets",
+          "query": "SELECT flag FROM secrets WHERE id=1"
+        }
+      },
+      "points": 60,
+      "hint": "You need to pivot from the web server to reach the internal network"
+    }
+  ],
+  "scoring": {
+    "total_points": 100,
+    "passing_score": 80,
+    "time_bonus": true,
+    "penalty_for_hints": true
+  },
+  "narrative": {
+    "scenario_background": "A company's web server is exposed to the internet in a DMZ. Intelligence suggests that sensitive data is stored on an internal database server that is not directly accessible from the internet. Your goal is to compromise the web server and use it as a pivot point to access the internal network.",
+    "attacker_role": "Red Team Operator",
+    "objectives": [
+      "Exploit the web server to gain initial access",
+      "Find credentials or methods for lateral movement",
+      "Access the internal database server",
+      "Extract the final flag from the database"
+    ],
+    "success_criteria": "Capture both flags to demonstrate successful lateral movement"
+  }
+}
