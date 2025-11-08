@@ -34,7 +34,7 @@ def scenario_with_limits():
 
 def test_provision_includes_resource_limits():
     """Test that resource limits from scenario are applied when no policy engine is used"""
-    from src.provisioner.policy_engine import PolicyEngine, ResourcePolicy, DifficultyTier
+    from src.provisioner.policy_engine import PolicyEngine
     
     sc = scenario_with_limits()
     plan = plan_scenario(sc)
