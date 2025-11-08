@@ -24,7 +24,7 @@ jobs:
           flake8
       - name: Type check
         run: |
-          mypy
+          mypy src/
       - name: Test with coverage
         run: |
           pytest --maxfail=1 --disable-warnings -q --cov=src --cov-report=term-missing

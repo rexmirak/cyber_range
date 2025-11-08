@@ -331,7 +331,7 @@ def provision(
             """Execute a single operation, return (op, error_msg or None)"""
             t = op.get("type")
             cmd = op.get("cmd")
-            if t.endswith(".skip"):
+            if t and t.endswith(".skip"):
                 return (op, None)
             if t == "healthcheck.wait":
                 cname = op.get("args", {}).get("container")
