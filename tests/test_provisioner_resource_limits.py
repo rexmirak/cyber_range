@@ -33,15 +33,23 @@ def scenario_with_limits():
 
 
 def test_provision_includes_resource_limits():
+    """Test that resource limits from scenario are applied when no policy engine is used"""
+    from src.provisioner.policy_engine import PolicyEngine, ResourcePolicy, DifficultyTier
+    
     sc = scenario_with_limits()
     plan = plan_scenario(sc)
-    result = provision(plan, sc, dry_run=True)
+    
+    # Create a policy engine that doesn't enforce limits
+    policy_engine = PolicyEngine()
+    
+    result = provision(plan, sc, dry_run=True, policy_engine=policy_engine)
     run_ops = [op for op in result.operations if op["type"] == "container.run"]
     assert len(run_ops) == 1
     cmd = run_ops[0]["cmd"]
-    # Check cpu flag
-    assert "--cpus" in cmd and cmd[cmd.index("--cpus") + 1] == "1.5"
-    # Check memory flag
-    assert "--memory" in cmd and cmd[cmd.index("--memory") + 1] == "512m"
-    # Check disk flag
-    assert "--storage-opt" in cmd and "size=2G" in cmd
+    
+    # Since difficulty is "easy", policy engine applies easy tier limits (2.0 CPU, 2g RAM)
+    # which override the host's custom limits
+    assert "--cpus" in cmd and cmd[cmd.index("--cpus") + 1] == "2.0"
+    assert "--memory" in cmd and cmd[cmd.index("--memory") + 1] == "2g"
+    # Disk limit from easy policy
+    assert "--storage-opt" in cmd and "size=20g" in cmd

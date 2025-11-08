@@ -8,6 +8,12 @@ from dataclasses import dataclass
 from typing import List, Dict, Any
 
 from src.planner.planner import PlanResult
+from src.provisioner.security_profiles import (
+    SecurityProfile, get_builtin_profile, profile_to_docker_flags
+)
+from src.provisioner.policy_engine import (
+    PolicyEngine, ResourcePolicy, create_default_engine
+)
 import subprocess
 from typing import Callable, Optional
 
@@ -40,6 +46,8 @@ def _container_run_op(
     ip: str | None,
     ports: List[Dict[str, Any]],
     isolate: bool = False,
+    security_profile: SecurityProfile | None = None,
+    applied_policy: ResourcePolicy | None = None,
 ) -> Dict[str, Any]:
     name = host.get("id")
     image = host.get("base_image") or "alpine:latest"
@@ -63,8 +71,21 @@ def _container_run_op(
             vol_specs.append({"source": src, "target": tgt})
 
     # Resource limits (cpu, memory, disk)
+    # Priority: applied_policy > host.resources
     resources = host.get("resources") or {}
-    cpu_limit = resources.get("cpu_limit")
+    
+    # If policy was applied, use policy limits, otherwise use host resources
+    if applied_policy and applied_policy.enforce_limits:
+        cpu_limit = applied_policy.limits.cpu_limit
+        memory_limit = applied_policy.limits.memory_limit
+        disk_limit = applied_policy.limits.disk_limit
+        pids_limit = applied_policy.limits.pids_limit
+    else:
+        cpu_limit = resources.get("cpu_limit")
+        memory_limit = resources.get("memory_limit")
+        disk_limit = resources.get("disk_limit")
+        pids_limit = resources.get("pids_limit")
+    
     if cpu_limit:
         # Accepts float or string
         try:
@@ -72,14 +93,13 @@ def _container_run_op(
             cmd += ["--cpus", str(cpu_val)]
         except Exception:
             pass
-    memory_limit = resources.get("memory_limit")
     if memory_limit:
         # Accepts Docker format: 512m, 2g, etc.
         cmd += ["--memory", str(memory_limit)]
-    disk_limit = resources.get("disk_limit")
     if disk_limit:
         # Only supported by some storage drivers (e.g., overlay2)
         cmd += ["--storage-opt", f"size={disk_limit}"]
+    
     # Environment variables
     env_map = host.get("env") or {}
     env_items = []
@@ -87,17 +107,33 @@ def _container_run_op(
         for k, v in env_map.items():
             cmd += ["-e", f"{k}={v}"]
             env_items.append({"key": k, "value": str(v)})
-    # Isolation/security options
+    
+    # Security profile - takes precedence over isolate flag
     security_opts: List[str] = []
-    if isolate:
-        # Conservative hardening set (adjustable later)
+
+    if security_profile:
+        # Use advanced security profile
+        profile_flags = profile_to_docker_flags(security_profile)
+        cmd.extend(profile_flags)
+
+        # Track security opts for operation metadata
+        security_opts = [
+            f for f in profile_flags
+            if f.startswith("--security-opt")
+        ]
+    elif isolate:
+        # Fallback to basic isolation
         security_opts = [
             "no-new-privileges:true",
         ]
         for opt in security_opts:
             cmd += ["--security-opt", opt]
-        # Read-only root fs + limited pids can be added optionally
         cmd += ["--read-only", "--pids-limit", "256"]
+    
+    # PID limit from policy or profile
+    if pids_limit and not security_profile:
+        # Only add if not already added by security profile
+        cmd += ["--pids-limit", str(pids_limit)]
     
     # Restart policy
     restart_policy = host.get("restart_policy")
@@ -177,12 +213,43 @@ def provision(
     isolate: bool = False,
     idempotent_mode: str = "skip",  # "skip" (default) or "replace"
     parallel: bool = False,  # Enable parallel provisioning for independent hosts
+    security_profile: str | SecurityProfile | None = None,
+    policy_engine: PolicyEngine | None = None,
 ) -> ProvisionResult:
     """
     Create networks and containers based on the plan. In dry_run mode return operations only.
+    
+    Args:
+        plan: The deployment plan with network topology and resource allocation
+        scenario: The scenario definition with hosts, networks, and metadata
+        dry_run: If True, only return operations without executing
+        executor: Function to execute Docker commands
+        isolate: Enable basic security isolation (deprecated, use security_profile)
+        idempotent_mode: How to handle existing resources ("skip" or "replace")
+        parallel: Enable parallel provisioning for independent hosts
+        security_profile: Security profile name or SecurityProfile object
+        policy_engine: Policy engine for resource limits (creates default if None)
     """
     ops: List[Dict[str, Any]] = []
     errors: List[str] = []
+    
+    # Initialize policy engine if not provided
+    if policy_engine is None:
+        policy_engine = create_default_engine()
+    
+    # Resolve security profile
+    resolved_profile: SecurityProfile | None = None
+    if isinstance(security_profile, str):
+        try:
+            resolved_profile = get_builtin_profile(security_profile)
+        except ValueError as e:
+            errors.append(str(e))
+    elif isinstance(security_profile, SecurityProfile):
+        resolved_profile = security_profile
+    
+    # Get policy for this scenario
+    scenario_metadata = scenario.get("metadata", {})
+    policy = policy_engine.get_policy(scenario_metadata)
 
     # Helper: check if network/container exists (only if executor is available)
     def _network_exists(net: str) -> bool:
@@ -244,6 +311,30 @@ def provision(
         if not nets:
             errors.append(f"Host '{hid}' has no networks in scenario")
             continue
+        
+        # Apply policy to host configuration
+        host_with_policy = policy_engine.apply_policy(host, policy)
+        
+        # Validate policy compliance if host has custom limits
+        is_valid, error_msg = policy_engine.validate_limits(host, policy)
+        if not is_valid:
+            errors.append(f"Host '{hid}' violates policy '{policy.name}': {error_msg}")
+            continue
+        
+        # Get host-specific security profile if defined
+        host_profile = resolved_profile
+        if "security_profile" in host:
+            # Host can override with custom profile
+            host_security = host["security_profile"]
+            if isinstance(host_security, str):
+                try:
+                    host_profile = get_builtin_profile(host_security)
+                except ValueError:
+                    errors.append(
+                        f"Host '{hid}' has invalid security profile: {host_security}"
+                    )
+                    host_profile = resolved_profile
+        
         ports = (plan.resource_allocation.get(hid, {}) or {}).get("ports", [])
         primary = nets[0]
         cname = host.get("id")
@@ -262,19 +353,23 @@ def provision(
                     "cmd": ["docker", "rm", "-f", cname],
                 })
                 ops.append(_container_run_op(
-                    host,
+                    host_with_policy,
                     primary.get("network_id"),
                     primary.get("ip_address"),
                     ports,
                     isolate=isolate,
+                    security_profile=host_profile,
+                    applied_policy=policy,
                 ))
         else:
             ops.append(_container_run_op(
-                host,
+                host_with_policy,
                 primary.get("network_id"),
                 primary.get("ip_address"),
                 ports,
                 isolate=isolate,
+                security_profile=host_profile,
+                applied_policy=policy,
             ))
         
         # Wait for health if healthcheck is defined

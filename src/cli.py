@@ -58,11 +58,50 @@ def plan(scenario_file: str):
 
 @cli.command(name="provision-cmd")
 @click.argument("scenario_file", type=click.Path(exists=True))
-@click.option("--execute", is_flag=True, default=False, help="Execute Docker commands (not just dry-run)")
-@click.option("--isolate", is_flag=True, default=False, help="Apply security isolation options to containers")
-@click.option("--parallel", is_flag=True, default=False, help="Enable parallel provisioning for independent hosts")
-def provision_cmd(scenario_file: str, execute: bool, isolate: bool, parallel: bool):
+@click.option(
+    "--execute",
+    is_flag=True,
+    default=False,
+    help="Execute Docker commands (not just dry-run)"
+)
+@click.option(
+    "--isolate",
+    is_flag=True,
+    default=False,
+    help="Apply basic security isolation (deprecated, use --security-profile)"
+)
+@click.option(
+    "--parallel",
+    is_flag=True,
+    default=False,
+    help="Enable parallel provisioning for independent hosts"
+)
+@click.option(
+    "--security-profile",
+    type=click.Choice(
+        ["minimal", "standard", "strict"],
+        case_sensitive=False
+    ),
+    default=None,
+    help="Security isolation profile (minimal/standard/strict)"
+)
+@click.option(
+    "--policy-tier",
+    type=click.Choice(["easy", "medium", "hard"], case_sensitive=False),
+    default="medium",
+    help="Default resource policy tier if not specified in scenario"
+)
+def provision_cmd(
+    scenario_file: str,
+    execute: bool,
+    isolate: bool,
+    parallel: bool,
+    security_profile: str | None,
+    policy_tier: str
+):
     """Provision scenario (dry-run by default)."""
+    from src.provisioner.policy_engine import PolicyEngine, DifficultyTier
+    
     data = json.loads(Path(scenario_file).read_text())
     plan_result = plan_scenario(data)
     if not plan_result.is_successful:
@@ -90,6 +129,11 @@ def provision_cmd(scenario_file: str, execute: bool, isolate: bool, parallel: bo
             )
             click.echo("- You can re-run without --execute for a safe dry-run.")
             raise SystemExit(1)
+    
+    # Create policy engine with specified default tier
+    tier = DifficultyTier(policy_tier)
+    policy_engine = PolicyEngine(default_tier=tier)
+    
     prov_result = provision(
         plan_result,
         data,
@@ -97,6 +141,8 @@ def provision_cmd(scenario_file: str, execute: bool, isolate: bool, parallel: bo
         executor=default_executor if execute else None,
         isolate=isolate,
         parallel=parallel,
+        security_profile=security_profile,
+        policy_engine=policy_engine,
     )
     click.echo("Operations:")
     for op in prov_result.operations:
@@ -128,14 +174,34 @@ def report(session_log: str, output_pdf: str):
 @cli.command(name="provision")
 @click.argument("scenario_file", type=click.Path(exists=True))
 @click.option("--execute", is_flag=True, default=False, help="Execute Docker commands (not just dry-run)")
-@click.option("--isolate", is_flag=True, default=False, help="Apply security isolation options to containers")
-def provision_short(scenario_file: str, execute: bool, isolate: bool):
+@click.option("--isolate", is_flag=True, default=False, help="Apply basic security isolation (deprecated)")
+@click.option(
+    "--security-profile",
+    type=click.Choice(["minimal", "standard", "strict"], case_sensitive=False),
+    default=None,
+    help="Security isolation profile"
+)
+@click.option(
+    "--policy-tier",
+    type=click.Choice(["easy", "medium", "hard"], case_sensitive=False),
+    default="medium",
+    help="Default resource policy tier"
+)
+def provision_short(
+    scenario_file: str,
+    execute: bool,
+    isolate: bool,
+    security_profile: str | None,
+    policy_tier: str
+):
     """Alias: same as provision-cmd."""
     provision_cmd.callback(
         scenario_file=scenario_file,
         execute=execute,
         isolate=isolate,
-        parallel=False
+        parallel=False,
+        security_profile=security_profile,
+        policy_tier=policy_tier
     )  # type: ignore
 
 

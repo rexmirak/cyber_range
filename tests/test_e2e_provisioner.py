@@ -216,6 +216,8 @@ def test_e2e_isolation_and_resource_limits():
     plan = plan_scenario(scenario)
     
     # Provision with isolation enabled
+    # Since complex_scenario has difficulty="medium", the policy engine will apply medium tier limits
+    # which override host-specific limits
     pres = provision(plan, scenario, dry_run=True, isolate=True)
     assert pres.is_successful
     
@@ -231,15 +233,19 @@ def test_e2e_isolation_and_resource_limits():
             assert "--read-only" in cmd
             assert "--pids-limit" in cmd
         
-        # Check resource limits based on host
+        # Resource limits are now governed by policy engine
+        # Medium difficulty tier: 1.0 CPU, 1g RAM, 10g disk, 512 pids
+        # These apply to all hosts regardless of individual host settings
         hname = op["args"]["name"]
         if hname == "host_db":
-            assert "--cpus" in cmd and cmd[cmd.index("--cpus") + 1] == "2.0"
-            assert "--memory" in cmd and cmd[cmd.index("--memory") + 1] == "1g"
-            assert "--storage-opt" in cmd
-        elif hname == "host_web":
+            # Policy engine applies medium tier limits
             assert "--cpus" in cmd and cmd[cmd.index("--cpus") + 1] == "1.0"
-            assert "--memory" in cmd and cmd[cmd.index("--memory") + 1] == "512m"
+            assert "--memory" in cmd and cmd[cmd.index("--memory") + 1] == "1g"
+            assert "--storage-opt" in cmd and "size=10g" in cmd
+        elif hname == "host_web":
+            # Policy engine applies medium tier limits
+            assert "--cpus" in cmd and cmd[cmd.index("--cpus") + 1] == "1.0"
+            assert "--memory" in cmd and cmd[cmd.index("--memory") + 1] == "1g"
 
 
 def test_e2e_healthcheck_and_restart_policies():
