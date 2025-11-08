@@ -5,7 +5,7 @@ Provides safe, limited tools that the LLM can use to gather context
 without directly executing commands or modifying state.
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Iterable
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import json
@@ -35,7 +35,7 @@ class Tool(ABC):
         pass
 
     @abstractmethod
-    def execute(self, **kwargs) -> ToolResult:
+    def execute(self, **kwargs: Any) -> ToolResult:
         """Execute the tool"""
         pass
 
@@ -54,7 +54,7 @@ class GetDocsTool(Tool):
     def description(self) -> str:
         return "Retrieve relevant documentation for a query. Args: query (str), top_k (int, optional)"
 
-    def execute(self, query: str, top_k: int = 3, **kwargs) -> ToolResult:
+    def execute(self, **kwargs: Any) -> ToolResult:
         """
         Retrieve documentation
         
@@ -65,8 +65,10 @@ class GetDocsTool(Tool):
         Returns:
             ToolResult with documents
         """
+        query = str(kwargs.get("query", "")).strip()
+        top_k = int(kwargs.get("top_k", 3))
         try:
-            context = self.rag.get_context(query, top_k=top_k)
+            context = self.rag.get_context(query, top_k=top_k) if query else []
             return ToolResult(success=True, data={"context": context})
         except Exception as e:
             return ToolResult(success=False, data=None, error=str(e))
@@ -86,7 +88,7 @@ class GetStateTool(Tool):
     def description(self) -> str:
         return "Get sanitized snapshot of current lab state (hosts, services, health, solved flags)"
 
-    def execute(self, **kwargs) -> ToolResult:
+    def execute(self, **kwargs: Any) -> ToolResult:
         """
         Get lab state
         
@@ -114,7 +116,7 @@ class ValidateJSONTool(Tool):
     def description(self) -> str:
         return "Validate scenario JSON. Args: json_str (str)"
 
-    def execute(self, json_str: str, **kwargs) -> ToolResult:
+    def execute(self, **kwargs: Any) -> ToolResult:
         """
         Validate JSON
         
@@ -124,18 +126,33 @@ class ValidateJSONTool(Tool):
         Returns:
             ToolResult with validation results
         """
+        json_str = kwargs.get("json_str")
+        if not isinstance(json_str, str):
+            return ToolResult(success=False, data=None, error="Missing json_str")
         try:
             scenario = json.loads(json_str)
-            errors = self.validator.validate(scenario)
-            
-            if errors:
+            res = self.validator.validate(scenario)
+            # Support both ValidationResult and legacy list-of-errors
+            if hasattr(res, "is_valid"):
+                is_valid = bool(getattr(res, "is_valid"))
+                errors_list = [str(e) for e in getattr(res, "errors", [])]
+                warnings_list = [str(w) for w in getattr(res, "warnings", [])]
+            else:
+                # Assume res is a list of error strings/objects
+                errors_list = [str(e) for e in (res or [])]
+                warnings_list = []
+                is_valid = len(errors_list) == 0
+
+            if not is_valid:
                 return ToolResult(
                     success=False,
-                    data={"errors": errors},
-                    error=f"Validation failed with {len(errors)} errors"
+                    data={"errors": errors_list, "warnings": warnings_list},
+                    error=f"Validation failed with {len(errors_list)} errors",
                 )
-            else:
-                return ToolResult(success=True, data={"message": "Valid JSON"})
+            return ToolResult(
+                success=True,
+                data={"message": "Valid JSON", "warnings": warnings_list},
+            )
         except json.JSONDecodeError as e:
             return ToolResult(success=False, data=None, error=f"Invalid JSON: {e}")
         except Exception as e:
@@ -153,7 +170,7 @@ class DiffJSONTool(Tool):
     def description(self) -> str:
         return "Compare two scenario JSONs. Args: old_json (str), new_json (str)"
 
-    def execute(self, old_json: str, new_json: str, **kwargs) -> ToolResult:
+    def execute(self, **kwargs: Any) -> ToolResult:
         """
         Compute diff between two JSONs
         
@@ -164,10 +181,13 @@ class DiffJSONTool(Tool):
         Returns:
             ToolResult with structured diff
         """
+        old_json = kwargs.get("old_json")
+        new_json = kwargs.get("new_json")
+        if not isinstance(old_json, str) or not isinstance(new_json, str):
+            return ToolResult(success=False, data=None, error="Missing old_json or new_json")
         try:
             old = json.loads(old_json)
             new = json.loads(new_json)
-            
             diff = self._compute_diff(old, new)
             return ToolResult(success=True, data={"diff": diff})
         except json.JSONDecodeError as e:

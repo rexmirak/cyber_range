@@ -24,7 +24,7 @@ Example:
 import json
 import jsonschema
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Any
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 
 
@@ -321,11 +321,13 @@ class ScenarioValidator:
         for idx, network in enumerate(networks):
             net_id = network.get("id", f"net_{idx}")
             if net_id not in used_networks:
-                warnings.append(ValidationError(
-                    path=f"networks[{idx}]",
-                    message=f"Network '{net_id}' is defined but not used by any host",
-                    severity="warning"
-                ))
+                warnings.append(
+                    ValidationError(
+                        path=f"networks[{idx}]",
+                        message=f"Network '{net_id}' is defined but not used by any host",
+                        severity="warning",
+                    )
+                )
         
         return errors, warnings
     
@@ -351,11 +353,13 @@ class ScenarioValidator:
             value = flag.get("value")
             if value:
                 if value in flag_values:
-                    errors.append(ValidationError(
-                        path=f"flags[{idx}].value",
-                        message=f"Duplicate flag value: '{value}'",
-                        severity="error"
-                    ))
+                    errors.append(
+                        ValidationError(
+                            path=f"flags[{idx}].value",
+                            message=f"Duplicate flag value: '{value}'",
+                            severity="error",
+                        )
+                    )
                 flag_values.append(value)
         
         # Check flag IDs are unique
@@ -363,11 +367,13 @@ class ScenarioValidator:
         for idx, flag in enumerate(flags):
             flag_id = flag.get("id")
             if flag_id in flag_ids:
-                errors.append(ValidationError(
-                    path=f"flags[{idx}].id",
-                    message=f"Duplicate flag ID: '{flag_id}'",
-                    severity="error"
-                ))
+                errors.append(
+                    ValidationError(
+                        path=f"flags[{idx}].id",
+                        message=f"Duplicate flag ID: '{flag_id}'",
+                        severity="error",
+                    )
+                )
             flag_ids.append(flag_id)
         
         # Check flag placement validity
@@ -377,12 +383,16 @@ class ScenarioValidator:
             
             # Validate placement has required fields
             if placement_type == "file":
-                if not placement.get("path"):
-                    errors.append(ValidationError(
-                        path=f"flags[{idx}].placement",
-                        message="File placement requires 'path' field",
-                        severity="error"
-                    ))
+                details = placement.get("details", {}) or {}
+                file_path = placement.get("path") or details.get("path")
+                if not file_path:
+                    errors.append(
+                        ValidationError(
+                            path=f"flags[{idx}].placement",
+                            message="File placement requires 'path' field",
+                            severity="error",
+                        )
+                    )
             elif placement_type == "env_var":
                 if not placement.get("variable"):
                     errors.append(ValidationError(

@@ -11,8 +11,9 @@ Interfaces:
 - plan_scenario(scenario: dict) -> PlanResult
 
 """
-from typing import Dict, Any, List, Tuple, Set, Optional
+from typing import Dict, Any, List, Tuple, Set
 from dataclasses import dataclass
+
 
 @dataclass
 class PlanResult:
@@ -26,6 +27,7 @@ class PlanResult:
     def is_successful(self) -> bool:
         """Return True if planning produced no errors"""
         return len(self.errors) == 0
+
 
 def plan_scenario(scenario: dict) -> PlanResult:
     """
@@ -44,8 +46,8 @@ def plan_scenario(scenario: dict) -> PlanResult:
     services: List[Dict[str, Any]] = scenario.get("services", []) or []
 
     # Index networks and services by id
-    network_by_id: Dict[str, Dict[str, Any]] = {n.get("id"): n for n in networks if n.get("id")}
-    service_by_id: Dict[str, Dict[str, Any]] = {s.get("id"): s for s in services if s.get("id")}
+    network_by_id: Dict[str, Dict[str, Any]] = {str(n.get("id")): n for n in networks if n.get("id")}
+    service_by_id: Dict[str, Dict[str, Any]] = {str(s.get("id")): s for s in services if s.get("id")}
 
     # Build network topology: network_id -> {subnet, hosts: [{host_id, ip}]}
     network_topology: Dict[str, Any] = {}
@@ -99,7 +101,7 @@ def plan_scenario(scenario: dict) -> PlanResult:
             # Already recorded above
             continue
         resources = h.get("resources", {}) or {}
-        host_alloc = {
+        host_alloc: Dict[str, Any] = {
             "cpu_limit": resources.get("cpu_limit"),
             "memory_limit": resources.get("memory_limit"),
             "disk_limit": resources.get("disk_limit"),
@@ -112,17 +114,34 @@ def plan_scenario(scenario: dict) -> PlanResult:
             if not svc:
                 errors.append(f"Host '{hid}' references undefined service '{svc_id}'")
                 continue
-            for p in svc.get("ports", []) or []:
+            for p in (svc.get("ports") or []):
                 internal = p.get("internal")
                 external = p.get("external")
                 protocol = (p.get("protocol") or "tcp").lower()
+                # Sanity checks for port ranges
+                if isinstance(internal, int) and (internal < 1 or internal > 65535):
+                    warnings.append(
+                        f"Host '{hid}' service '{svc_id}' has internal port out of range: {internal}"
+                    )
+                if isinstance(external, int) and (external < 1 or external > 65535):
+                    warnings.append(
+                        f"Host '{hid}' service '{svc_id}' has external port out of range: {external}"
+                    )
+                if external and not internal:
+                    warnings.append(
+                        f"Host '{hid}' service '{svc_id}' exposes external port {external} without internal port"
+                    )
                 # Track external port conflicts only when external mapping is provided
                 if isinstance(external, int):
                     key = (external, protocol)
                     if key in external_port_usage:
                         prev = external_port_usage[key]
                         errors.append(
-                            f"External port conflict: {protocol}/{external} used by '{prev}' and host '{hid}' (service '{svc_id}')"
+                            (
+                                "External port conflict: "
+                                f"{protocol}/{external} used by '{prev}' and host '{hid}' "
+                                f"(service '{svc_id}')"
+                            )
                         )
                     else:
                         external_port_usage[key] = f"{hid}:{svc_id}"
@@ -140,11 +159,32 @@ def plan_scenario(scenario: dict) -> PlanResult:
             if not resources.get("memory_limit"):
                 warnings.append(f"Host '{hid}' missing memory_limit")
 
+        # Oversized resource requests (parse cpu as float cores, memory as <num><k|m|g>)
+        cpu_raw = resources.get("cpu_limit")
+        try:
+            if isinstance(cpu_raw, str) and cpu_raw.strip():
+                cpu_val = float(cpu_raw)
+                if cpu_val > 4.0:
+                    warnings.append(f"Host '{hid}' requests high cpu_limit ({cpu_val} cores)")
+        except Exception:
+            # Non-fatal
+            pass
+        mem_raw = resources.get("memory_limit")
+        try:
+            if isinstance(mem_raw, str) and mem_raw.strip():
+                num = float(mem_raw[:-1])
+                unit = mem_raw[-1].lower()
+                mb = num if unit == "m" else (num * 1024 if unit == "g" else num / 1024)
+                if mb > 8192:
+                    warnings.append(f"Host '{hid}' requests high memory_limit ({int(mb)} MB)")
+        except Exception:
+            pass
+
         resource_allocation[hid] = host_alloc
 
     # Dependency graph (optional 'depends_on' list per host)
     # Build adjacency list and in-degree for Kahn topological sort
-    host_ids = {h.get("id") for h in hosts if h.get("id")}
+    host_ids: Set[str] = {str(h.get("id")) for h in hosts if h.get("id")}
     adj: Dict[str, Set[str]] = {hid: set() for hid in host_ids}
     indegree: Dict[str, int] = {hid: 0 for hid in host_ids}
 
@@ -204,10 +244,14 @@ def plan_scenario(scenario: dict) -> PlanResult:
             type_priority.get(next((h.get("type") or "victim") for h in hosts if h.get("id") == hid), 1), hid
         ))
     else:
-        ordered_components = [h.get("id") for h in sorted(hosts, key=host_sort_key) if h.get("id")]
+        ordered_components = [str(h.get("id")) for h in sorted(hosts, key=host_sort_key) if h.get("id")]
 
     # Attacker last enforcement (move attacker ids to end if they accidentally appear earlier due to deps)
-    attackers = [hid for hid in ordered_components if next((h.get("type") for h in hosts if h.get("id") == hid), "") == "attacker"]
+    attackers = [
+        hid
+        for hid in ordered_components
+        if next((h.get("type") for h in hosts if h.get("id") == hid), "") == "attacker"
+    ]
     non_attackers = [hid for hid in ordered_components if hid not in attackers]
     ordered_components = non_attackers + attackers
 

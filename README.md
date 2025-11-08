@@ -1,3 +1,169 @@
+## Features
+
+- **Scenario-as-Code:** Define entire labs in structured JSON
+- **LLM-Assisted Authoring:** Generate scenarios from natural language descriptions (Ollama, local RAG)
+- **Docker-Based:** Lightweight containers for rapid deployment
+- **Vulnerability Injection:** Web, service, and credential-based exploits, with modular post-provision hooks
+- **Lateral Movement:** Multi-network topologies for realistic pivoting scenarios
+- **Flag System:** Automated flag placement and verification (file, env, db, service)
+- **Resource Guardrails:** Planned enforcement of CPU/memory/disk limits and container isolation
+- **PDF Reports:** Session-based, with plan summary, warnings, flags, and operator actions
+- **Session Logging:** All actions/events recorded for reporting and audit
+- **Idempotent Provisioning:** Skips existing networks/containers, safe to re-run
+- **Local & Private:** All LLM processing runs locally via Ollama
+## Architecture
+
+```
+User CLI
+        ├── LLM Layer (Ollama, RAG, author/repair, hints)
+        ├── Validator (schema + semantic + topology)
+        ├── Planner (dependency order, resource allocation, warnings)
+        ├── Provisioner (idempotent Docker ops, resource limits, isolation)
+        ├── Vulnerability Modules (post-provision hooks)
+        ├── Flag Service (placement, submission, scoring)
+        ├── Session Manager (event log, JSONL)
+        └── Reporter (PDF, summary, flags, warnings)
+```
+## Quick Start
+
+### Prerequisites
+
+- Docker (Desktop or Colima) installed and running
+- Ollama installed with llama3.2:latest (for LLM features)
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd cyber_range
+
+# Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# (Optional) Install Ollama and pull model
+ollama pull llama3.2:latest
+
+# Run all tests
+python -m pytest --maxfail=1 --disable-warnings -q
+```
+## CLI Usage
+
+```bash
+# Validate a scenario
+python -m src.cli validate examples/lateral_movement.json
+
+# Plan deployment order and resources
+python -m src.cli plan examples/lateral_movement.json
+
+# Dry-run provisioning (prints docker commands)
+python -m src.cli provision-cmd examples/lateral_movement.json --isolate
+
+# Execute provisioning (real Docker, with isolation)
+python -m src.cli provision-cmd examples/lateral_movement.json --execute --isolate
+
+# Generate a PDF report from a session log
+python -m src.cli report session.jsonl report.pdf
+```
+
+Notes:
+- Provisioning is idempotent: skips existing networks/containers.
+- Use `--isolate` for security flags (no-new-privileges, read-only, pids-limit).
+- Use `--execute` to actually run Docker commands; otherwise, dry-run only.
+## Authoring, Deployment, and Reporting
+
+1. **Author a Scenario (LLM-assisted):**
+        - Interactive CLI (coming soon):
+          ```bash
+          python -m src.cli author
+          # Example prompt: "Create a web server with SQL injection and a database with weak password"
+          ```
+2. **Deploy a Lab:**
+        - Validate, plan, and provision as above.
+3. **Interact with the Lab:**
+        - Use Docker/Colima to inspect containers, networks, and ports.
+        - Submit flags (flag service coming soon).
+        - Request hints (LLM guidance).
+4. **Teardown and Report:**
+        - Remove containers/networks (destroy command coming soon).
+        - Generate PDF report from session log.
+## Supported Vulnerabilities & Features
+
+- Weak/default passwords
+- Outdated software versions
+- Service misconfigurations
+- Exposed services
+- Vulnerable web applications
+- Directory traversal
+- SQL injection
+- Command injection
+- SSRF (server-side request forgery)
+- Lateral movement (multi-network, pivoting)
+- Resource limits (planned: cpu, memory, disk)
+- Container isolation (planned: seccomp, userns, cap-drop)
+## LLM Features
+
+- **Scenario Authoring:**
+        - Generate scenario JSON from natural language (interactive CLI coming soon)
+- **Repair Loop:**
+        - Fix schema/semantic errors automatically
+- **Guidance:**
+        - Tiered hints (nudge → step-by-step)
+- **Explanations:**
+        - Post-lab learning: what, why, remediation, real-world impact
+## Project Structure
+
+```
+cyber_range/
+        docs/         # Documentation (progress, planning, schema, testing)
+        examples/     # Example scenarios (sqli_basic, lateral_movement)
+        schema/       # JSON Schema definitions
+        src/          # Source code (llm, validator, planner, provisioner, reporter, session)
+        tests/        # Unit/integration/E2E tests
+        .github/      # CI workflows
+        requirements.txt
+```
+## Testing
+
+```bash
+# Run all tests
+python -m pytest --maxfail=1 --disable-warnings -q
+
+# With coverage
+pytest --cov=src --cov-report=term-missing
+```
+
+See `docs/testing_guide.md` for more.
+## Roadmap & Phases
+
+- **Phase 1:** Planning, schema, MVP scenarios
+- **Phase 2:** LLM APIs, tools, RAG, author/repair, hints
+- **Phase 3:** Orchestrator: validator, planner, provisioner, session, PDF reporter
+- **Phase 4:** Unit tests for orchestrator, reporter, session
+- **Phase 5:** Integration/E2E tests, flag service, vulnerability modules
+- **Phase 6:** Documentation, demo, developer/operator guides
+- **Phase 7:** Security guardrails, resource enforcement, idempotency, advanced isolation
+## Contributing
+
+This is a portfolio project. Contributions, suggestions, and feedback are welcome!
+
+## Security Notice
+
+⚠️ **Always run labs in an isolated VM.** The vulnerabilities deployed are real and can compromise your host system if not properly isolated.
+
+## License
+
+[To be determined]
+
+## Author
+
+Karim - [Your contact/portfolio info]
+
+---
+
+**Status:** Orchestrator, provisioner, and reporting in progress. See roadmap for next steps.
 # Cyber Range Scenario Deployer
 
 > Automated cyber range lab deployment from JSON scenarios with LLM-powered authoring and guidance
@@ -53,10 +219,6 @@ The Cyber Range Scenario Deployer is a local-first tool that takes scenario defi
 
 - Docker installed and running
 - Ollama installed with llama3.2:latest
-- Python 3.9+
-- Running in a VM (recommended for isolation)
-
-### Installation
 
 ```bash
 # Clone the repository
@@ -78,6 +240,23 @@ python -m pytest tests/ -v -m "not integration"  # Should pass all 96 unit tests
 ```
 
 ### Usage
+
+## CLI usage (optional)
+
+You can use a simple CLI for validate/plan/provision (dry-run by default):
+
+```bash
+python -m src.cli validate examples/sample_scenario.json
+python -m src.cli plan examples/sample_scenario.json
+# Dry-run provisioning (prints docker commands):
+python -m src.cli provision-cmd examples/sample_scenario.json
+# Execute commands (requires Docker):
+python -m src.cli provision-cmd --execute examples/sample_scenario.json
+```
+
+Notes:
+- Provisioning defaults to dry-run; add `--execute` to run Docker commands.
+- For non-dry runs, ensure Docker is installed and accessible.
 
 #### 1. Create a Scenario (LLM-Assisted)
 

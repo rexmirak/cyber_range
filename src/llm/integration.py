@@ -93,8 +93,11 @@ class LLMIntegration:
             enums=enums,
             examples=examples,
         )
-        
-        return json.loads(json_str)
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            # Return raw structure hint if decode fails
+            return {"_raw": json_str, "_error": "decode_failed"}
 
     def repair_scenario(
         self,
@@ -125,11 +128,18 @@ class LLMIntegration:
                     errors=errors,
                     schema=schema,
                 )
-                return json.loads(repaired_str)
+                try:
+                    return json.loads(repaired_str)
+                except json.JSONDecodeError as de:
+                    raise ValueError(f"Repaired JSON decode failure: {de}")
             except (json.JSONDecodeError, ValueError) as e:
                 if attempt == max_attempts - 1:
-                    raise ValueError(f"Failed to repair JSON after {max_attempts} attempts: {e}")
+                    raise ValueError(
+                        f"Failed to repair JSON after {max_attempts} attempts: {e}"
+                    )
                 errors.append(f"Attempt {attempt + 1} failed: {e}")
+        # Fallback - should not reach here due to return or raise in loop
+        raise ValueError("Repair attempts exhausted without return")
 
     def provide_hint(
         self,
@@ -182,7 +192,7 @@ class LLMIntegration:
             Explanation text
         """
         # Enhance with RAG context
-        context = {"scenario": scenario}
+        context: Dict[str, Any] = {"scenario": scenario}
         if self.rag:
             rag_context = self.rag.get_context(topic, top_k=2, max_chars=800)
             if rag_context:
@@ -227,7 +237,7 @@ class LLMIntegration:
         schema: Dict[str, Any],
         enums: Dict[str, List[str]],
         validator,
-    ) -> Dict[str, Any]:
+    ) -> Optional[Dict[str, Any]]:
         """
         Interactive authoring session with repair loop
         
@@ -237,7 +247,7 @@ class LLMIntegration:
             validator: JSON validator
             
         Returns:
-            Valid scenario JSON
+            Valid scenario JSON or None
         """
         print("🤖 Scenario Authoring Assistant")
         print("Describe the scenario you want to create:")
@@ -256,21 +266,26 @@ class LLMIntegration:
         # Validate and repair loop
         max_iterations = 3
         for iteration in range(max_iterations):
-            errors = validator.validate(scenario)
-            
-            if not errors:
+            vres = validator.validate(scenario)
+            if vres.is_valid:
                 print("✅ Valid scenario generated!")
                 return scenario
-            
-            print(f"⚠️  Found {len(errors)} validation errors. Attempting repair...")
-            
+            print(
+                f"⚠️  Found {len(vres.errors)} validation errors. Attempting repair..."
+            )
             try:
                 scenario_str = json.dumps(scenario, indent=2)
-                scenario = self.repair_scenario(scenario_str, errors, schema)
+                scenario = self.repair_scenario(
+                    scenario_str,
+                    [str(e) for e in vres.errors],
+                    schema,
+                )
             except Exception as e:
                 print(f"❌ Repair failed: {e}")
                 if iteration == max_iterations - 1:
-                    print("💡 Try simplifying your description or being more specific.")
+                    print(
+                        "💡 Try simplifying your description or being more specific."
+                    )
                     return None
         
         print("❌ Could not generate valid scenario after multiple attempts")
