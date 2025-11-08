@@ -11,7 +11,7 @@ This script demonstrates how to use the LLM features:
 import json
 from pathlib import Path
 
-from src.llm import OllamaAdapter, LLMConfig, HintTier
+from src.llm import OllamaAdapter, HintTier
 from src.llm.integration import LLMIntegration
 
 
@@ -30,10 +30,19 @@ def example_1_simple_generation():
     
     enums = {
         "difficulty": ["easy", "medium", "hard"],
-        "host_type": ["attacker", "victim", "web", "db", "ftp", "smb", "custom"],
-        "service_type": ["nginx", "apache", "flask", "node", "mysql", "postgres", "vsftpd", "openssh", "samba", "custom"],
-        "vuln_type": ["weak_password", "outdated_software", "misconfiguration", "default_creds", "exposed_service", 
-                      "vulnerable_webapp", "directory_traversal", "sql_injection", "command_injection", "ssrf", "lateral_movement"],
+        "host_type": [
+            "attacker", "victim", "web", "db", "ftp", "smb", "custom"
+        ],
+        "service_type": [
+            "nginx", "apache", "flask", "node", "mysql",
+            "postgres", "vsftpd", "openssh", "samba", "custom"
+        ],
+        "vuln_type": [
+            "weak_password", "outdated_software", "misconfiguration",
+            "default_creds", "exposed_service", "vulnerable_webapp",
+            "directory_traversal", "sql_injection", "command_injection",
+            "ssrf", "lateral_movement"
+        ],
         "network_type": ["bridge", "custom_bridge", "isolated", "public"],
     }
     
@@ -99,7 +108,7 @@ def example_2_repair_loop():
     schema = json.loads(schema_path.read_text())
     
     print(f"\nBroken JSON:\n{broken_json}\n")
-    print(f"Errors:\n" + "\n".join(f"  - {e}" for e in errors) + "\n")
+    print("Errors:\n" + "\n".join(f"  - {e}" for e in errors) + "\n")
     print("Attempting repair...\n")
     
     try:
@@ -208,7 +217,7 @@ def main():
     
     # Check if Ollama is available
     try:
-        adapter = OllamaAdapter()
+        OllamaAdapter()
         print("✅ Ollama connection successful\n")
     except RuntimeError as e:
         print(f"❌ {e}")

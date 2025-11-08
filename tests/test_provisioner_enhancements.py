@@ -4,7 +4,10 @@ from src.provisioner.provisioner import provision
 
 def scenario_with_env_vol():
     return {
-        "metadata": {"name": "EnvVol Lab", "version": "1.0.0", "difficulty": "easy", "author": "Test", "description": "desc"},
+        "metadata": {
+            "name": "EnvVol Lab", "version": "1.0.0", "difficulty": "easy",
+            "author": "Test", "description": "desc"
+        },
         "networks": [
             {"id": "net_dmz", "name": "dmz", "type": "custom_bridge", "subnet": "172.21.0.0/24"}
         ],

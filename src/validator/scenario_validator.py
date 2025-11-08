@@ -210,7 +210,7 @@ class ScenarioValidator:
                             severity="error"
                         ))
             
-            # Check flag references  
+            # Check flag references
             for flag_id in host.get("flags", []):
                 if flag_id not in flag_ids:
                     errors.append(ValidationError(

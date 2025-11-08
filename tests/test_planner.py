@@ -1,7 +1,6 @@
 """
 Unit tests for the planner module
 """
-import pytest
 from src.planner.planner import plan_scenario, PlanResult
 
 

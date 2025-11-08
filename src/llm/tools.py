@@ -5,7 +5,7 @@ Provides safe, limited tools that the LLM can use to gather context
 without directly executing commands or modifying state.
 """
 
-from typing import Dict, List, Any, Optional, Iterable
+from typing import Dict, List, Any, Optional  # Iterable removed (unused)
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import json
@@ -199,7 +199,7 @@ class DiffJSONTool(Tool):
         """Recursively compute differences"""
         diffs = []
         
-        if type(old) != type(new):
+        if not isinstance(new, type(old)):
             diffs.append(f"{path}: type changed from {type(old).__name__} to {type(new).__name__}")
             return diffs
         

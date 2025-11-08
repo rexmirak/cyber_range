@@ -5,8 +5,7 @@ Tests safe tools for LLM interaction.
 """
 
 import pytest
-import json
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 from src.llm.tools import (
     Tool,

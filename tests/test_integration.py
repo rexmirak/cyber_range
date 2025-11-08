@@ -40,10 +40,15 @@ def enums():
     """Define available enums"""
     return {
         "difficulty": ["easy", "medium", "hard"],
-        "host_type": ["attacker", "victim", "web", "db", "ftp", "smb", "custom"],
-        "service_type": ["nginx", "apache", "flask", "node", "mysql", "postgres", "vsftpd", "openssh", "samba", "custom"],
-        "vuln_type": ["weak_password", "outdated_software", "misconfiguration", "default_creds", "exposed_service", 
-                      "vulnerable_webapp", "directory_traversal", "sql_injection", "command_injection", "ssrf", "lateral_movement"],
+        "host_type": ["attacker", "victim", "web", "db", "ftp", "smb",
+                      "custom"],
+        "service_type": ["nginx", "apache", "flask", "node", "mysql",
+                         "postgres", "vsftpd", "openssh", "samba", "custom"],
+        "vuln_type": ["weak_password", "outdated_software",
+                      "misconfiguration", "default_creds", "exposed_service",
+                      "vulnerable_webapp", "directory_traversal",
+                      "sql_injection", "command_injection", "ssrf",
+                      "lateral_movement"],
         "network_type": ["bridge", "custom_bridge", "isolated", "public"],
     }
 

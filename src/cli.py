@@ -9,10 +9,12 @@ from src.provisioner.provisioner import provision, default_executor
 from src.reporter.utils import load_session_from_jsonl, aggregate_events
 from src.reporter.pdf_reporter import generate_pdf_from_events
 
+
 @click.group()
 def cli():
     """Cyber Range Deployer CLI"""
     pass
+
 
 @cli.command()
 @click.argument("scenario_file", type=click.Path(exists=True))
@@ -33,6 +35,7 @@ def validate(scenario_file: str):
             click.echo(f"  - {e}")
         raise SystemExit(1)
 
+
 @cli.command()
 @click.argument("scenario_file", type=click.Path(exists=True))
 def plan(scenario_file: str):
@@ -52,11 +55,13 @@ def plan(scenario_file: str):
         for w in plan_result.warnings:
             click.echo(f"  - {w}")
 
+
 @cli.command(name="provision-cmd")
 @click.argument("scenario_file", type=click.Path(exists=True))
 @click.option("--execute", is_flag=True, default=False, help="Execute Docker commands (not just dry-run)")
 @click.option("--isolate", is_flag=True, default=False, help="Apply security isolation options to containers")
-def provision_cmd(scenario_file: str, execute: bool, isolate: bool):
+@click.option("--parallel", is_flag=True, default=False, help="Enable parallel provisioning for independent hosts")
+def provision_cmd(scenario_file: str, execute: bool, isolate: bool, parallel: bool):
     """Provision scenario (dry-run by default)."""
     data = json.loads(Path(scenario_file).read_text())
     plan_result = plan_scenario(data)
@@ -75,8 +80,14 @@ def provision_cmd(scenario_file: str, execute: bool, isolate: bool):
             raise SystemExit(1)
         if code != 0:
             click.echo("Docker does not appear to be running or accessible.")
-            click.echo("- Start Docker Desktop (macOS) and wait until it says 'Docker is running'.")
-            click.echo("- Or ensure your DOCKER_HOST/context points to a running daemon (e.g., colima start).")
+            click.echo(
+                "- Start Docker Desktop (macOS) and wait until it says "
+                "'Docker is running'."
+            )
+            click.echo(
+                "- Or ensure your DOCKER_HOST/context points to a running "
+                "daemon (e.g., colima start)."
+            )
             click.echo("- You can re-run without --execute for a safe dry-run.")
             raise SystemExit(1)
     prov_result = provision(
@@ -85,6 +96,7 @@ def provision_cmd(scenario_file: str, execute: bool, isolate: bool):
         dry_run=not execute,
         executor=default_executor if execute else None,
         isolate=isolate,
+        parallel=parallel,
     )
     click.echo("Operations:")
     for op in prov_result.operations:
@@ -95,6 +107,8 @@ def provision_cmd(scenario_file: str, execute: bool, isolate: bool):
             click.echo(f"  - {e}")
         if execute:
             raise SystemExit(1)
+
+
 @cli.command()
 @click.argument("session_log", type=click.Path(exists=True))
 @click.argument("output_pdf", type=click.Path())
@@ -117,7 +131,13 @@ def report(session_log: str, output_pdf: str):
 @click.option("--isolate", is_flag=True, default=False, help="Apply security isolation options to containers")
 def provision_short(scenario_file: str, execute: bool, isolate: bool):
     """Alias: same as provision-cmd."""
-    provision_cmd.callback(scenario_file=scenario_file, execute=execute, isolate=isolate)  # type: ignore
+    provision_cmd.callback(
+        scenario_file=scenario_file,
+        execute=execute,
+        isolate=isolate,
+        parallel=False
+    )  # type: ignore
+
 
 if __name__ == "__main__":
     cli()

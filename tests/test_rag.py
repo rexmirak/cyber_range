@@ -5,7 +5,6 @@ Tests document indexing, search, and retrieval.
 """
 
 import pytest
-import json
 from pathlib import Path
 import tempfile
 import shutil

@@ -4,11 +4,10 @@ Uses reportlab to create a PDF with session metadata, summary counts,
 warnings/errors, and a paginated event list.
 """
 from __future__ import annotations
-from typing import List, Dict, Any
+from typing import List, Dict, Any  # Tuple unused
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
-from typing import Tuple
 
 from .utils import aggregate_events
 
@@ -38,7 +37,7 @@ def generate_pdf_from_events(pdf_path: str, session_id: str, events: List[Dict[s
 
     y = height - 2 * cm
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(2 * cm, y, f"Cyber Range Session Report")
+    c.drawString(2 * cm, y, "Cyber Range Session Report")
     y -= 1 * cm
     c.setFont("Helvetica", 11)
     c.drawString(2 * cm, y, f"Session: {session_id}")
@@ -65,7 +64,9 @@ def generate_pdf_from_events(pdf_path: str, session_id: str, events: List[Dict[s
         c.setFont("Helvetica", 10)
         for w in warnings[:50]:
             if y < 2 * cm:
-                c.showPage(); y = height - 2 * cm; c.setFont("Helvetica", 10)
+                c.showPage()
+                y = height - 2 * cm
+                c.setFont("Helvetica", 10)
             y = _draw_wrapped_text(c, 2 * cm, y, f"- {w}", width - 4 * cm, 0.45 * cm)
 
     if errors:
@@ -75,19 +76,22 @@ def generate_pdf_from_events(pdf_path: str, session_id: str, events: List[Dict[s
         c.setFont("Helvetica", 10)
         for e in errors[:50]:
             if y < 2 * cm:
-                c.showPage(); y = height - 2 * cm; c.setFont("Helvetica", 10)
+                c.showPage()
+                y = height - 2 * cm
+                c.setFont("Helvetica", 10)
             y = _draw_wrapped_text(c, 2 * cm, y, f"- {e}", width - 4 * cm, 0.45 * cm)
 
     # Events section
     c.setFont("Helvetica-Bold", 12)
     if y < 3 * cm:
-        c.showPage(); y = height - 2 * cm
+        c.showPage()
+        y = height - 2 * cm
     c.drawString(2 * cm, y, "Events:")
     y -= 0.6 * cm
     c.setFont("Helvetica", 10)
 
     for ev in events[:200]:  # cap for one-page simplicity
-        line = f"{ev.get('ts','')}  {ev.get('type','')}  {str(ev.get('data',''))[:120]}"
+        line = f"{ev.get('ts', '')}  {ev.get('type', '')}  {str(ev.get('data', ''))[:120]}"
         if y < 2 * cm:
             c.showPage()
             y = height - 2 * cm

@@ -5,11 +5,10 @@ Tests connection, generation, JSON extraction, and error handling.
 """
 
 import pytest
-import json
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch  # MagicMock unused
 import requests
 
-from src.llm.adapter import OllamaAdapter, LLMConfig, HintTier
+from src.llm.adapter import OllamaAdapter, HintTier, LLMConfig
 
 
 class TestOllamaAdapter:

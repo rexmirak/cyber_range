@@ -13,7 +13,7 @@ from pathlib import Path
 def check_dependencies():
     """Check if required test dependencies are installed"""
     try:
-        import pytest
+        import pytest  # noqa: F401
         return True
     except ImportError:
         print("❌ pytest not installed")
@@ -33,13 +33,12 @@ def run_tests(verbose=True, coverage=False):
     project_root = Path(__file__).parent.parent
     
     # Build pytest command
-        # Use pytest from venv if available
-        import sys
-        import os
-        venv_pytest = os.path.join(os.path.dirname(sys.executable), 'pytest')
-        pytest_cmd = venv_pytest if os.path.exists(venv_pytest) else 'pytest'
-    
-        cmd = [pytest_cmd]
+    # Use pytest from venv if available
+    import os
+    venv_pytest = os.path.join(os.path.dirname(sys.executable), 'pytest')
+    pytest_cmd = venv_pytest if os.path.exists(venv_pytest) else 'pytest'
+
+    cmd = [pytest_cmd]
     
     if verbose:
         cmd.append("-v")
