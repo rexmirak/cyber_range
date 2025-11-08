@@ -82,6 +82,7 @@ reports/*.pdf
 sessions/*.json
 temp/
 tmp/
+docs/
 
 # RAG embeddings and vector store
 embeddings/
