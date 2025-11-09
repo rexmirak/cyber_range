@@ -193,8 +193,8 @@ class SecurityProfile:
     seccomp_config: Optional[Dict[str, Any]] = None  # Inline seccomp config
     
     # Capabilities
-    cap_drop: List[str] = None  # Capabilities to drop
-    cap_add: List[str] = None   # Capabilities to add back
+    cap_drop: Optional[List[str]] = None  # Capabilities to drop
+    cap_add: Optional[List[str]] = None   # Capabilities to add back
     
     # User namespace
     userns_mode: Optional[str] = None  # "host" or "remap"
@@ -300,10 +300,12 @@ def profile_to_docker_flags(profile: SecurityProfile) -> List[str]:
         flags.extend(["--security-opt", "seccomp=<inline>"])
     
     # Capabilities
-    for cap in profile.cap_drop:
-        flags.extend(["--cap-drop", cap])
-    for cap in profile.cap_add:
-        flags.extend(["--cap-add", cap])
+    if profile.cap_drop:
+        for cap in profile.cap_drop:
+            flags.extend(["--cap-drop", cap])
+    if profile.cap_add:
+        for cap in profile.cap_add:
+            flags.extend(["--cap-add", cap])
     
     # User namespace
     if profile.userns_mode == "remap" and profile.userns_remap:
